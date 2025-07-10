@@ -1,5 +1,6 @@
 import cv2
-from expression_classifier import ExpressionClassifier
+# from expression_classifier import ExpressionClassifier
+from expression_classifier_rf import ExpressionClassifier
 
 # 加载 Haar Cascade 人脸检测模型
 face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
@@ -9,8 +10,8 @@ facemark = cv2.face.createFacemarkLBF()
 facemark.loadModel('lbfmodel.yaml')  # 加载68个关键点的预训练模型
 
 # 初始化表情识别模型
-classifier = ExpressionClassifier(model_path='models/expression_mlp.pth', device='cuda' if cv2.ocl.haveOpenCL() else 'cpu')
-
+# classifier = ExpressionClassifier(model_path='models/expression_mlp.pth', device='cuda' if cv2.ocl.haveOpenCL() else 'cpu')
+classifier = ExpressionClassifier(model_path='models/expression_rf.pkl')
 # Open webcam
 cap = cv2.VideoCapture(0)
 cv2.namedWindow('Face Keypoints', cv2.WINDOW_NORMAL)
