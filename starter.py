@@ -47,8 +47,9 @@ while True:
             # 显示分类结果
             cv2.putText(frame, expression, (x, y - 10),
             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
-            cv2.imshow('Face Keypoints', frame)
 
+    # 显示图像
+    cv2.imshow('Face Keypoints', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 

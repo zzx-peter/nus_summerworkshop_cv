@@ -2,9 +2,6 @@ import cv2
 import mediapipe as mp
 from expression_classifier_rf import ExpressionClassifier
 
-# 初始化模型
-classifier = ExpressionClassifier(model_path='models/expression_rf.pkl')
-
 # 初始化 MediaPipe Face Mesh，468个三维点
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=5, refine_landmarks=True)
@@ -42,11 +39,6 @@ while True:
             x_min, x_max = min(x_list), max(x_list)
             y_min, y_max = min(y_list), max(y_list)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-            # 推理表情
-            expression, _ = classifier.predict(landmarks[0])
-            # 显示结果
-            x0, y0 = int(landmarks[1][0]), int(landmarks[1][1])  # 使用某个点附近显示
-            cv2.putText(frame, expression, (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)
 
     cv2.imshow('Face Mesh', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
