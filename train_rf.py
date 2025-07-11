@@ -7,9 +7,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 from expression_classifier_rf import CLASSES
 from sklearn.metrics import accuracy_score
+from sklearn.decomposition import PCA
 
 class LandmarkDataset:
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, limit_per_class=120):  # 限制每类最大数量
         self.samples = []
         self.labels = []
         self.class_to_idx = {cls: idx for idx, cls in enumerate(CLASSES)}
@@ -20,7 +21,10 @@ class LandmarkDataset:
 
         for class_name in CLASSES:
             class_dir = os.path.join(root_dir, class_name)
+            used = 0
             for fname in os.listdir(class_dir):
+                # if used >= limit_per_class:
+                #     break
                 path = os.path.join(class_dir, fname)
                 image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
                 if image is None:
@@ -36,6 +40,7 @@ class LandmarkDataset:
                 keypoints = (keypoints - np.mean(keypoints)) / np.std(keypoints)
                 self.samples.append(keypoints.astype(np.float32))
                 self.labels.append(self.class_to_idx[class_name])
+                used += 1
 
     def get_data(self):
         return np.array(self.samples), np.array(self.labels)
@@ -85,7 +90,11 @@ class ImageDatasetRaw:
                 if image is None or image.shape != (48, 48):
                     continue
                 flat = image.flatten().astype(np.float32)
-                flat = (flat - np.mean(flat)) / np.std(flat)
+                # std = np.std(flat)
+                # if std < 1e-4:  # 标准差太小，跳过或用默认值
+                #     continue
+                # flat = (flat - np.mean(flat)) / std
+                flat = flat / 255.0
                 self.samples.append(flat)
                 self.labels.append(self.class_to_idx[class_name])
 
@@ -93,14 +102,19 @@ class ImageDatasetRaw:
         return np.array(self.samples), np.array(self.labels)
 
 def train_rf():
-    # print("加载训练集...")
-    # train_set = LandmarkDataset('facial_expression_dataset/train')
-    # X_train, y_train = train_set.get_data()
+    print("加载训练集...")
+    train_set = LandmarkDataset('facial_expression_dataset/train')
+    X_train, y_train = train_set.get_data()
 
-    # print("加载测试集...")
-    # test_set = LandmarkDataset('facial_expression_dataset/test')
-    # X_test, y_test = test_set.get_data()
+    print("加载测试集...")
+    test_set = LandmarkDataset('facial_expression_dataset/test')
+    X_test, y_test = test_set.get_data()
 
+    # PCA 降维
+    print("使用 PCA 降维...")
+    pca = PCA(n_components=30)
+    X_train = pca.fit_transform(X_train)
+    X_test = pca.transform(X_test)
     # print("加载训练集...")
     # train_set = LandmarkDatasetFAN('facial_expression_dataset/train')
     # X_train, y_train = train_set.get_data()
@@ -109,21 +123,28 @@ def train_rf():
     # test_set = LandmarkDatasetFAN('facial_expression_dataset/test')
     # X_test, y_test = test_set.get_data()
 
-    print("加载训练集...")
-    train_set = ImageDatasetRaw('facial_expression_dataset/train')
-    X_train, y_train = train_set.get_data()
+    # print("加载训练集...")
+    # train_set = ImageDatasetRaw('facial_expression_dataset_fan/train')
+    # X_train, y_train = train_set.get_data()
 
-    print("加载测试集...")
-    test_set = ImageDatasetRaw('facial_expression_dataset/test')
-    X_test, y_test = test_set.get_data()
+    # print("加载测试集...")
+    # test_set = ImageDatasetRaw('facial_expression_dataset_fan/test')
+    # X_test, y_test = test_set.get_data()
 
     print("开始训练 RandomForest...")
-    clf = RandomForestClassifier(n_estimators=100, random_state=42)
+    clf = RandomForestClassifier(
+        n_estimators=200,
+        max_depth=15,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        class_weight='balanced',
+        random_state=42
+    )
     clf.fit(X_train, y_train)
 
-    os.makedirs("models", exist_ok=True)
-    joblib.dump(clf, "models/expression_rf.pkl")
-    print("模型保存为 models/expression_rf.pkl")
+    # os.makedirs("models", exist_ok=True)
+    # joblib.dump(clf, "models/expression_rf.pkl")
+    # print("模型保存为 models/expression_rf.pkl")
 
     print("\n测试集评估:")
     y_pred = clf.predict(X_test)
