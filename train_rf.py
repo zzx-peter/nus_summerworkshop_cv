@@ -1,4 +1,7 @@
-# train_expression_model_rf.py
+# train_rf_cached.py
+# 与原版 train_rf.py 逻辑一致，但新增了“关键点缓存”机制，
+# 只在首次运行时执行人脸检测与关键点提取，后续直接读取 .npz 文件，显著加速训练/测试。
+
 import os
 import cv2
 import numpy as np
@@ -9,15 +12,32 @@ from expression_classifier_rf import CLASSES
 from sklearn.metrics import accuracy_score
 from sklearn.decomposition import PCA
 
+
 class LandmarkDataset:
-    def __init__(self, root_dir, limit_per_class=120):  # 限制每类最大数量
+    """基于 OpenCV LBF 的人脸关键点数据集。
+    
+    如果提供 `cache_file` 且该文件存在，则直接加载缓存，
+    否则执行关键点提取并将结果保存到缓存。
+    """
+
+    def __init__(self, root_dir, cache_file=None, limit_per_class=120):  # 限制每类最大数量
         self.samples = []
         self.labels = []
         self.class_to_idx = {cls: idx for idx, cls in enumerate(CLASSES)}
 
-        self.face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+        # ---- 1. 直接读取缓存 ----
+        if cache_file and os.path.exists(cache_file):
+            print(f"读取关键点缓存: {cache_file}")
+            data = np.load(cache_file)
+            self.samples = data["samples"]
+            self.labels = data["labels"]
+            return
+
+        # ---- 2. 首次运行: 提取关键点并缓存 ----
+        print("缓存未找到，开始提取关键点 ...")
+        self.face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
         self.facemark = cv2.face.createFacemarkLBF()
-        self.facemark.loadModel('lbfmodel.yaml')
+        self.facemark.loadModel("lbfmodel.yaml")
 
         for class_name in CLASSES:
             class_dir = os.path.join(root_dir, class_name)
@@ -42,19 +62,34 @@ class LandmarkDataset:
                 self.labels.append(self.class_to_idx[class_name])
                 used += 1
 
+        # 转为 ndarray 以便保存
+        self.samples = np.array(self.samples)
+        self.labels = np.array(self.labels)
+
+        # 保存缓存文件，使用压缩格式节省空间
+        if cache_file:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            np.savez_compressed(cache_file, samples=self.samples, labels=self.labels)
+            print(f"关键点提取完成，已缓存到: {cache_file}")
+
     def get_data(self):
-        return np.array(self.samples), np.array(self.labels)
+        return self.samples, self.labels
+
 
 # ---- 2. 使用 FAN (face-alignment) 提取关键点 --------------------------------
 import face_alignment
 import torch
+
 
 class LandmarkDatasetFAN:
     def __init__(self, root_dir):
         self.samples = []
         self.labels = []
         self.class_to_idx = {cls: idx for idx, cls in enumerate(CLASSES)}
-        self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, device='cuda' if torch.cuda.is_available() else 'cpu')
+        self.fa = face_alignment.FaceAlignment(
+            face_alignment.LandmarksType.TWO_D,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
 
         for class_name in CLASSES:
             class_dir = os.path.join(root_dir, class_name)
@@ -75,6 +110,7 @@ class LandmarkDatasetFAN:
     def get_data(self):
         return np.array(self.samples), np.array(self.labels)
 
+
 # ---- 3. 使用整张灰度图（48×48） ---------------------------------------------
 class ImageDatasetRaw:
     def __init__(self, root_dir):
@@ -90,10 +126,6 @@ class ImageDatasetRaw:
                 if image is None or image.shape != (48, 48):
                     continue
                 flat = image.flatten().astype(np.float32)
-                # std = np.std(flat)
-                # if std < 1e-4:  # 标准差太小，跳过或用默认值
-                #     continue
-                # flat = (flat - np.mean(flat)) / std
                 flat = flat / 255.0
                 self.samples.append(flat)
                 self.labels.append(self.class_to_idx[class_name])
@@ -101,44 +133,40 @@ class ImageDatasetRaw:
     def get_data(self):
         return np.array(self.samples), np.array(self.labels)
 
+
 def train_rf():
-    print("加载训练集...")
-    train_set = LandmarkDataset('facial_expression_dataset/train')
+    # 缓存文件路径
+    cache_dir = "cache"
+    os.makedirs(cache_dir, exist_ok=True)
+    train_cache = os.path.join(cache_dir, "train_landmarks.npz")
+    test_cache = os.path.join(cache_dir, "test_landmarks.npz")
+
+    print("加载训练集 ...")
+    train_set = LandmarkDataset(
+        root_dir="facial_expression_dataset/train", cache_file=train_cache
+    )
     X_train, y_train = train_set.get_data()
 
-    print("加载测试集...")
-    test_set = LandmarkDataset('facial_expression_dataset/test')
+    print("加载测试集 ...")
+    test_set = LandmarkDataset(
+        root_dir="facial_expression_dataset/test", cache_file=test_cache
+    )
     X_test, y_test = test_set.get_data()
 
-    # PCA 降维
-    print("使用 PCA 降维...")
-    pca = PCA(n_components=30)
-    X_train = pca.fit_transform(X_train)
-    X_test = pca.transform(X_test)
-    # print("加载训练集...")
-    # train_set = LandmarkDatasetFAN('facial_expression_dataset/train')
-    # X_train, y_train = train_set.get_data()
+    # # PCA 降维
+    # print("使用 PCA 降维 ...")
+    # pca = PCA(n_components=30)
+    # X_train = pca.fit_transform(X_train)
+    # X_test = pca.transform(X_test)
 
-    # print("加载测试集...")
-    # test_set = LandmarkDatasetFAN('facial_expression_dataset/test')
-    # X_test, y_test = test_set.get_data()
-
-    # print("加载训练集...")
-    # train_set = ImageDatasetRaw('facial_expression_dataset_fan/train')
-    # X_train, y_train = train_set.get_data()
-
-    # print("加载测试集...")
-    # test_set = ImageDatasetRaw('facial_expression_dataset_fan/test')
-    # X_test, y_test = test_set.get_data()
-
-    print("开始训练 RandomForest...")
+    print("开始训练 RandomForest ...")
     clf = RandomForestClassifier(
         n_estimators=200,
         max_depth=15,
         min_samples_split=10,
         min_samples_leaf=5,
-        class_weight='balanced',
-        random_state=42
+        class_weight="balanced",
+        random_state=42,
     )
     clf.fit(X_train, y_train)
 
@@ -158,5 +186,6 @@ def train_rf():
     print(f"训练集准确率: {train_acc:.4f}")
     print(f"测试集准确率: {test_acc:.4f}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     train_rf()
