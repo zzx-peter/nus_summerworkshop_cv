@@ -42,20 +42,20 @@ class LandmarkDataset:
 
 def train_svm():
     print("加载训练集...")
-    train_set = LandmarkDataset('facial_expression_dataset/train')
+    train_set = LandmarkDataset('facial_expression_dataset_contrast/train')
     X_train, y_train = train_set.get_data()
 
     print("加载测试集...")
-    test_set = LandmarkDataset('facial_expression_dataset/test')
+    test_set = LandmarkDataset('facial_expression_dataset_contrast/test')
     X_test, y_test = test_set.get_data()
 
     print("开始训练 SVM...")
-    clf = SVC(kernel='rbf', C=5, gamma='scale', probability=True)
+    clf = SVC(kernel='rbf', C=10, class_weight='balanced')
     clf.fit(X_train, y_train)
 
     os.makedirs("models", exist_ok=True)
-    joblib.dump(clf, "models/expression_svm.pkl")
-    print("模型保存为 models/expression_svm.pkl")
+    joblib.dump(clf, "models/expression.pkl")
+    print("模型保存为 models/expression.pkl")
 
     print("\n测试集评估:")
     y_pred = clf.predict(X_test)

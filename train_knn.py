@@ -36,8 +36,8 @@ class LandmarkDataset:
 
 def train_knn():
     print('载入数据 …')
-    X_train, y_train = LandmarkDataset('facial_expression_dataset/train').get_data()
-    X_test,  y_test  = LandmarkDataset('facial_expression_dataset/test').get_data()
+    X_train, y_train = LandmarkDataset('facial_expression_dataset_contrast/train').get_data()
+    X_test,  y_test  = LandmarkDataset('facial_expression_dataset_contrast/test').get_data()
 
     # -------- KNN 模型 --------
     print('训练 KNN …')
