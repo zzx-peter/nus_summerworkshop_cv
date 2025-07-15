@@ -10,6 +10,7 @@ from PIL import Image, ImageTk
 from ultralytics import YOLO
 from score_engine import ScoreEngine, score_to_label
 import time  
+import queue 
 
 # Load YOLOv8 pose model
 # This will be the starting model to extract poses from videos.
@@ -33,6 +34,7 @@ skeleton = [
 
 class PoseApp:
     def __init__(self, root):
+        self.ref_kpts_queue = queue.Queue(maxsize=30) # 用于存储参考视频的关键点
         self.root = root
         self.root.title("Stickman Dance GUI")
         self.root.geometry("1200x600") # You can adjust the window size as needed
@@ -121,6 +123,7 @@ class PoseApp:
             self.cap_cam.release()
 
     def process_video_file(self):
+        frame_idx = 0  # 初始化
         self.cap_file = cv2.VideoCapture(self.video_path)
         # ✅ 获取参考视频真实 FPS
         ref_fps = self.cap_file.get(cv2.CAP_PROP_FPS)
@@ -128,9 +131,15 @@ class PoseApp:
             ret, frame = self.cap_file.read()
             if not ret:
                 break
-            frame, _ = self.process_pose(frame)
-            self.update_label(self.label_file, frame)
-            time.sleep(1 / ref_fps)  # ✅ 控制播放速度
+            vis, kpts = self.process_pose(frame)
+            if kpts is not None:
+                try:
+                    self.ref_kpts_queue.put_nowait((frame_idx, kpts))  # ✅ 存成 (编号, 关键点)
+                except queue.Full:
+                    pass
+            self.update_label(self.label_file, vis)
+            frame_idx += 1
+            time.sleep(1 / ref_fps)  # ✅ 控制播放速度  
         self.cap_file.release()
 
     def process_webcam(self):
@@ -147,44 +156,45 @@ class PoseApp:
 
     # —— 对舞评分核心 —— ★
     def process_dance_match(self):    
-        self.cap_cam  = cv2.VideoCapture(0)
-        self.cap_file = cv2.VideoCapture(self.video_path)
+        self.cap_cam = cv2.VideoCapture(0)
+        last_ref_kpts = None
+        frame_idx = 0
 
-        while (self.cap_cam.isOpened() and self.cap_file.isOpened()
-               and self.running_cam):
-            ret_cam,  frame_cam  = self.cap_cam.read()
-            ret_ref,  frame_ref  = self.cap_file.read()
-            if not ret_cam or not ret_ref: break
+        while self.cap_cam.isOpened() and self.running_cam:
+            ret_cam, frame_cam = self.cap_cam.read()
+            if not ret_cam:
+                break
 
             frame_cam = cv2.flip(frame_cam, 1)
+            cam_vis, cam_kpts = self.process_pose(frame_cam)
 
-            # 提取关键点与可视化
-            cam_vis,  cam_kpts  = self.process_pose(frame_cam)
-            ref_vis,  ref_kpts  = self.process_pose(frame_ref)
+            # 从队列中同步参考帧
+            try:
+                while True:
+                    ref_idx, ref_kpts = self.ref_kpts_queue.get_nowait()
+                    if ref_idx >= frame_idx:
+                        last_ref_kpts = ref_kpts
+                        break
+            except queue.Empty:
+                ref_kpts = last_ref_kpts
+            else:
+                ref_kpts = last_ref_kpts
 
-            # 评分
+            # —— 评分（建议每 2 帧一次） ——
             if cam_kpts is not None and ref_kpts is not None:
-                if self.current_frame_index % 2 == 0:  
-                    print(f"[DEBUG] 打分中: 帧 {self.current_frame_index}")
-                    t = self.current_frame_index / self.fps
+                if frame_idx % 2 == 0:
+                    t = frame_idx / self.fps
                     score, _ = self.scorer.update(ref_kpts, cam_kpts, t)
                     label = score_to_label(score)
                     cv2.putText(cam_vis, f"{label} {score:.0%}", (100,60),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
 
-            # # ---- 交由主线程刷新 GUI ----
-            # self.root.after(0, self.update_label, self.label_cam,  cam_vis)
-            # self.root.after(0, self.update_label, self.label_file, ref_vis)
-
-            # 更新 GUI
-            self.update_label(self.label_cam,  cam_vis)
-            # self.update_label(self.label_file, ref_vis)
-
-            self.current_frame_index += 1
-            time.sleep(1 / self.fps)   # 限制读取/评分速度
+            self.update_label(self.label_cam, cam_vis)
+            frame_idx += 1
+            time.sleep(1 / self.fps)
 
         self.cap_cam.release()
-        self.cap_file.release()
+        self.running_cam = False
 
     def process_pose(self, frame):
         keypoints_ndarray = None  

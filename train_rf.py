@@ -136,23 +136,34 @@ class ImageDatasetRaw:
 
 def train_rf():
     # 缓存文件路径
-    cache_dir = "cache"
-    os.makedirs(cache_dir, exist_ok=True)
-    train_cache = os.path.join(cache_dir, "train_landmarks.npz")
-    test_cache = os.path.join(cache_dir, "test_landmarks.npz")
+    # cache_dir = "cache"
+    # os.makedirs(cache_dir, exist_ok=True)
+    # train_cache = os.path.join(cache_dir, "train_landmarks.npz")
+    # test_cache = os.path.join(cache_dir, "test_landmarks.npz")
+
+    # print("加载训练集 ...")
+    # train_set = LandmarkDataset(
+    #     root_dir="facial_expression_dataset/train", cache_file=train_cache
+    # )
+    # X_train, y_train = train_set.get_data()
+
+    # print("加载测试集 ...")
+    # test_set = LandmarkDataset(
+    #     root_dir="facial_expression_dataset/test", cache_file=test_cache
+    # )
+    # X_test, y_test = test_set.get_data()
 
     print("加载训练集 ...")
-    train_set = LandmarkDataset(
-        root_dir="facial_expression_dataset/train", cache_file=train_cache
+    train_set = ImageDatasetRaw(
+        root_dir="facial_expression_dataset_fan/train"
     )
     X_train, y_train = train_set.get_data()
 
     print("加载测试集 ...")
-    test_set = LandmarkDataset(
-        root_dir="facial_expression_dataset/test", cache_file=test_cache
+    test_set = ImageDatasetRaw(
+        root_dir="facial_expression_dataset_fan/test"
     )
     X_test, y_test = test_set.get_data()
-
     # # PCA 降维
     # print("使用 PCA 降维 ...")
     # pca = PCA(n_components=30)
@@ -161,11 +172,11 @@ def train_rf():
 
     print("开始训练 RandomForest ...")
     clf = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=15,
-        min_samples_split=10,
-        min_samples_leaf=5,
-        class_weight="balanced",
+        n_estimators=100,
+        # max_depth=15,
+        # min_samples_split=10,
+        # min_samples_leaf=5,
+        # class_weight="balanced",
         random_state=42,
     )
     clf.fit(X_train, y_train)

@@ -8,9 +8,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 from ultralytics import YOLO
-from score_engine import ScoreEngine, score_to_label
+from score_engine2 import ScoreEngine, score_to_label
 import time  
-import queue 
 
 # Load YOLOv8 pose model
 # This will be the starting model to extract poses from videos.
@@ -34,7 +33,9 @@ skeleton = [
 
 class PoseApp:
     def __init__(self, root):
-        self.ref_kpts_queue = queue.Queue(maxsize=30) # 用于存储参考视频的关键点
+        # 初始化时新增缓存变量
+        self.last_score_label = ""
+        self.last_score_time = 0
         self.root = root
         self.root.title("Stickman Dance GUI")
         self.root.geometry("1200x600") # You can adjust the window size as needed
@@ -47,10 +48,10 @@ class PoseApp:
         self.show_video_frame = True
 
         self.fps = 15.0  # 必须和评分器一致
-        self.scorer = ScoreEngine(
-            beat_audio_path="",
+        self.scorer = ScoreEngine(                      # 直接用 JSON
+            angle_json_path="angle_data.json",
             sample_rate=self.fps,
-            use_beat=False)
+        )
         self.current_frame_index = 0
 
 
@@ -86,7 +87,6 @@ class PoseApp:
             messagebox.showinfo("Video Selected", os.path.basename(path))
             # 重新加载评分器，使用选中的视频提取节拍
             print(f"[INFO] 加载参考视频用于打分: {path}")
-            self.scorer = ScoreEngine(beat_audio_path=path, sample_rate=self.fps, use_beat=False)  # ★ 新增
 
     def start_video(self):
         if not self.video_path:
@@ -114,6 +114,8 @@ class PoseApp:
             messagebox.showwarning("No Video", "请先选择参考视频")
             return
         if not self.running_cam:
+            print(f"[INFO] 开始舞蹈匹配: {self.video_path}")
+            # 在这里将舞蹈视频进行解析
             self.running_cam = True
             threading.Thread(target=self.process_dance_match, daemon=True).start()
 
@@ -123,23 +125,17 @@ class PoseApp:
             self.cap_cam.release()
 
     def process_video_file(self):
-        frame_idx = 0  # 初始化
         self.cap_file = cv2.VideoCapture(self.video_path)
+        self.scorer.start()           # 计时起点        
         # ✅ 获取参考视频真实 FPS
         ref_fps = self.cap_file.get(cv2.CAP_PROP_FPS)
         while self.cap_file.isOpened() and self.running_file:
             ret, frame = self.cap_file.read()
             if not ret:
                 break
-            vis, kpts = self.process_pose(frame)
-            if kpts is not None:
-                try:
-                    self.ref_kpts_queue.put_nowait((frame_idx, kpts))  # ✅ 存成 (编号, 关键点)
-                except queue.Full:
-                    pass
-            self.update_label(self.label_file, vis)
-            frame_idx += 1
-            time.sleep(1 / ref_fps)  # ✅ 控制播放速度  
+            frame, _ = self.process_pose(frame)
+            self.update_label(self.label_file, frame)
+            time.sleep(1 / ref_fps)  # ✅ 控制播放速度
         self.cap_file.release()
 
     def process_webcam(self):
@@ -154,47 +150,43 @@ class PoseApp:
             self.update_label(self.label_cam, frame)
         self.cap_cam.release()
 
-    # —— 对舞评分核心 —— ★
-    def process_dance_match(self):    
+    def process_dance_match(self):
         self.cap_cam = cv2.VideoCapture(0)
-        last_ref_kpts = None
-        frame_idx = 0
+        # self.scorer.start()           # 计时起点
+        batch: List[dict] = []        # 缓存 5 帧角度
 
         while self.cap_cam.isOpened() and self.running_cam:
-            ret_cam, frame_cam = self.cap_cam.read()
-            if not ret_cam:
+            ok, frame = self.cap_cam.read()
+            if not ok:
                 break
+            frame = cv2.flip(frame, 1)
 
-            frame_cam = cv2.flip(frame_cam, 1)
-            cam_vis, cam_kpts = self.process_pose(frame_cam)
+            vis, kpts = self.process_pose(frame)
+            if kpts is not None:
+                ang = self.scorer.kpts_to_angles(kpts)
+                batch.append(ang)
 
-            # 从队列中同步参考帧
-            try:
-                while True:
-                    ref_idx, ref_kpts = self.ref_kpts_queue.get_nowait()
-                    if ref_idx >= frame_idx:
-                        last_ref_kpts = ref_kpts
-                        break
-            except queue.Empty:
-                ref_kpts = last_ref_kpts
-            else:
-                ref_kpts = last_ref_kpts
+            # 每 5 帧打一次分
 
-            # —— 评分（建议每 2 帧一次） ——
-            if cam_kpts is not None and ref_kpts is not None:
-                if frame_idx % 2 == 0:
-                    t = frame_idx / self.fps
-                    score, _ = self.scorer.update(ref_kpts, cam_kpts, t)
-                    label = score_to_label(score)
-                    cv2.putText(cam_vis, f"{label} {score:.0%}", (100,60),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+            if len(batch) == 5:
+                score, label = self.scorer.update_batch(batch)
+                batch.clear()
+                if label:                       # 命中时间窗才显示
+                    self.last_score_label = f"{label} {score:.0%}"
+                    self.last_score_time = time.time()
 
-            self.update_label(self.label_cam, cam_vis)
-            frame_idx += 1
+            # —— 显示评分（支持保留上一次） ——
+            if time.time() - self.last_score_time < 0.5 :  # 显示持续 1 秒
+                cv2.putText(
+                    vis, self.last_score_label,
+                    (100, 60), cv2.FONT_HERSHEY_SIMPLEX,
+                    1.2, (0, 255, 0), 2
+                )
+
+            self.update_label(self.label_cam, vis)
             time.sleep(1 / self.fps)
 
         self.cap_cam.release()
-        self.running_cam = False
 
     def process_pose(self, frame):
         keypoints_ndarray = None  
@@ -230,12 +222,15 @@ class PoseApp:
         return overlay, keypoints_ndarray
 
     def update_label(self, label, frame):
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(rgb)
-        img = img.resize((640, 384))  # Resize for better fit
-        imgtk = ImageTk.PhotoImage(image=img)
-        label.imgtk = imgtk
-        label.configure(image=imgtk)
+        def _update():
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(rgb)
+            img = img.resize((640, 384))
+            imgtk = ImageTk.PhotoImage(image=img)
+            label.imgtk = imgtk  # 保持引用，避免被 GC 回收
+            label.configure(image=imgtk)
+
+        self.root.after(0, _update)  # ✅ 主线程异步调度
 
 if __name__ == "__main__":
     root = tk.Tk()

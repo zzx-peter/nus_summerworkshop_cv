@@ -79,13 +79,13 @@ def train_svm():
 
     print("加载训练集 ...")
     train_set = LandmarkDataset(
-        root_dir="facial_expression_dataset/train", cache_file=train_cache
+        root_dir="facial_expression_dataset/train"
     )
     X_train, y_train = train_set.get_data()
 
     print("加载测试集 ...")
     test_set = LandmarkDataset(
-        root_dir="facial_expression_dataset/test", cache_file=test_cache
+        root_dir="facial_expression_dataset/test"
     )
     X_test, y_test = test_set.get_data()
 
