@@ -49,7 +49,7 @@ class PoseApp:
 
         self.fps = 15.0  # 必须和评分器一致
         self.scorer = ScoreEngine(                      # 直接用 JSON
-            angle_json_path="angle_data.json",
+            angle_json_path="new_angle_data2.json",
             sample_rate=self.fps,
         )
         self.current_frame_index = 0
@@ -125,8 +125,7 @@ class PoseApp:
             self.cap_cam.release()
 
     def process_video_file(self):
-        self.cap_file = cv2.VideoCapture(self.video_path)
-        self.scorer.start()           # 计时起点        
+        self.cap_file = cv2.VideoCapture(self.video_path)      
         # ✅ 获取参考视频真实 FPS
         ref_fps = self.cap_file.get(cv2.CAP_PROP_FPS)
         while self.cap_file.isOpened() and self.running_file:
@@ -152,7 +151,7 @@ class PoseApp:
 
     def process_dance_match(self):
         self.cap_cam = cv2.VideoCapture(0)
-        # self.scorer.start()           # 计时起点
+        self.scorer.start()           # 计时起点
         batch: List[dict] = []        # 缓存 5 帧角度
 
         while self.cap_cam.isOpened() and self.running_cam:
@@ -166,17 +165,16 @@ class PoseApp:
                 ang = self.scorer.kpts_to_angles(kpts)
                 batch.append(ang)
 
-            # 每 5 帧打一次分
+            # 每 n 帧打一次分
 
-            if len(batch) == 5:
+            if len(batch) == 3:
                 score, label = self.scorer.update_batch(batch)
                 batch.clear()
                 if label:                       # 命中时间窗才显示
                     self.last_score_label = f"{label} {score:.0%}"
                     self.last_score_time = time.time()
-
             # —— 显示评分（支持保留上一次） ——
-            if time.time() - self.last_score_time < 0.5 :  # 显示持续 1 秒
+            if time.time() - self.last_score_time < 0.2 :  # 显示持续 1 秒
                 cv2.putText(
                     vis, self.last_score_label,
                     (100, 60), cv2.FONT_HERSHEY_SIMPLEX,

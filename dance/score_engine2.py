@@ -55,10 +55,10 @@ class ScoreEngine:
     读取参考 JSON → 实时接收每 5 帧角度 → 输出 (score, label)
     """
     def __init__(self,
-                 angle_json_path: str = "angle_data.json",
+                 angle_json_path: str = "new_angle_data2.json",
                  sample_rate: float = 15,
                  sim_threshold: float = 0.70,
-                 window: float = 0.01):
+                 window: float = 0.5):
         self.sample_rate = sample_rate
         self.threshold   = sim_threshold
         self.window      = window
@@ -98,6 +98,7 @@ class ScoreEngine:
         candidates = [rf for rf in self._ref_frames
                       if abs(rf["t"] - t_now) <= self.window]
         if not candidates:
+            print(f"未找到时间窗内参考帧: {t_now:.3f}s")
             return None, ""
 
         # 2. 逐个比较取最大相似度
