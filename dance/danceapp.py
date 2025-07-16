@@ -47,7 +47,7 @@ class PoseApp:
         self.cap_cam = None
         self.show_video_frame = True
 
-        self.fps = 15.0  # 必须和评分器一致
+        self.fps = 30.0  # 必须和评分器一致
         self.scorer = ScoreEngine(                      # 直接用 JSON
             angle_json_path="new_angle_data2.json",
             sample_rate=self.fps,
@@ -153,6 +153,7 @@ class PoseApp:
         self.cap_cam = cv2.VideoCapture(0)
         self.scorer.start()           # 计时起点
         batch: List[dict] = []        # 缓存 5 帧角度
+        scores = []  # ✅ 记录所有打分
 
         while self.cap_cam.isOpened() and self.running_cam:
             ok, frame = self.cap_cam.read()
@@ -173,6 +174,7 @@ class PoseApp:
                 if label:                       # 命中时间窗才显示
                     self.last_score_label = f"{label} {score:.0%}"
                     self.last_score_time = time.time()
+                    scores.append(score)  # ✅ 保存每次得分
             # —— 显示评分（支持保留上一次） ——
             if time.time() - self.last_score_time < 0.2 :  # 显示持续 1 秒
                 cv2.putText(
@@ -183,8 +185,13 @@ class PoseApp:
 
             self.update_label(self.label_cam, vis)
             time.sleep(1 / self.fps)
-
+            # ✅ 打印总评
         self.cap_cam.release()
+        if scores:
+            avg_score = sum(scores) / len(scores)
+            print(f"[✅ 舞蹈完成] 总得分次数：{len(scores)}，平均得分：{avg_score:.2%}")
+        else:
+            print("[❌ 无评分] 未记录任何得分。")
 
     def process_pose(self, frame):
         keypoints_ndarray = None  
