@@ -125,7 +125,8 @@ class PoseApp:
             self.cap_cam.release()
 
     def process_video_file(self):
-        self.cap_file = cv2.VideoCapture(self.video_path)      
+        self.cap_file = cv2.VideoCapture(self.video_path)    
+        self.scorer.start()           # 计时起点  
         # ✅ 获取参考视频真实 FPS
         ref_fps = self.cap_file.get(cv2.CAP_PROP_FPS)
         while self.cap_file.isOpened() and self.running_file:
@@ -151,7 +152,6 @@ class PoseApp:
 
     def process_dance_match(self):
         self.cap_cam = cv2.VideoCapture(0)
-        self.scorer.start()           # 计时起点
         batch: List[dict] = []        # 缓存 5 帧角度
         scores = []  # ✅ 记录所有打分
 
