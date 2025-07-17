@@ -53,8 +53,8 @@ def batch_convert_dataset(input_root, output_root):
             process_image_to_keypoints_canvas(input_path, output_path, class_name)
 
 if __name__ == "__main__":
-    input_dir = "facial_expression_dataset/test"
-    output_dir = "facial_expression_dataset_lbf/test"
+    input_dir = "misclassified/to_neutral/sad"
+    output_dir = "misclassified/to_neutral/sad_lbf"
     batch_convert_dataset(input_dir, output_dir)
 
     # 输出统计结果

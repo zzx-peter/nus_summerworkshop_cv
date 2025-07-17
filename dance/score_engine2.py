@@ -6,9 +6,9 @@ import numpy as np
 
 # ------------------ 打分标签 ------------------
 LABELS: List[Tuple[float, str]] = [
-    (0.95, "PERFECT"),
-    (0.85, "GREAT"),
-    (0.75, "GOOD"),
+    (0.90, "PERFECT"),
+    (0.75, "GREAT"),
+    (0.60, "GOOD"),
 ]
 
 # ------------------ 工具函数 ------------------
@@ -57,8 +57,8 @@ class ScoreEngine:
     def __init__(self,
                  angle_json_path: str = "new_angle_data2.json",
                  sample_rate: float = 15,
-                 sim_threshold: float = 0.70,
-                 window: float = 0.5):
+                 sim_threshold: float = 0.60,
+                 window: float = 1.5):
         self.sample_rate = sample_rate
         self.threshold   = sim_threshold
         self.window      = window

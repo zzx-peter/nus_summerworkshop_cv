@@ -6,12 +6,12 @@ import os
 import cv2
 import numpy as np
 import joblib
+import shutil
+import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix
-from expression_classifier_rf import CLASSES
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.decomposition import PCA
-
+from expression_classifier_rf import CLASSES
 
 class LandmarkDataset:
     """基于 OpenCV LBF 的人脸关键点数据集。
@@ -136,39 +136,39 @@ class ImageDatasetRaw:
 
 def train_rf():
     # 缓存文件路径
-    # cache_dir = "cache"
-    # os.makedirs(cache_dir, exist_ok=True)
-    # train_cache = os.path.join(cache_dir, "train_landmarks.npz")
-    # test_cache = os.path.join(cache_dir, "test_landmarks.npz")
-
-    # print("加载训练集 ...")
-    # train_set = LandmarkDataset(
-    #     root_dir="facial_expression_dataset/train", cache_file=train_cache
-    # )
-    # X_train, y_train = train_set.get_data()
-
-    # print("加载测试集 ...")
-    # test_set = LandmarkDataset(
-    #     root_dir="facial_expression_dataset/test", cache_file=test_cache
-    # )
-    # X_test, y_test = test_set.get_data()
+    cache_dir = "cache"
+    os.makedirs(cache_dir, exist_ok=True)
+    train_cache = os.path.join(cache_dir, "train_landmarks.npz")
+    test_cache = os.path.join(cache_dir, "test_landmarks.npz")
 
     print("加载训练集 ...")
-    train_set = ImageDatasetRaw(
-        root_dir="facial_expression_dataset_fan/train"
+    train_set = LandmarkDataset(
+        root_dir="facial_expression_dataset/train", cache_file=train_cache
     )
     X_train, y_train = train_set.get_data()
 
     print("加载测试集 ...")
-    test_set = ImageDatasetRaw(
-        root_dir="facial_expression_dataset_fan/test"
+    test_set = LandmarkDataset(
+        root_dir="facial_expression_dataset/test", cache_file=test_cache
     )
     X_test, y_test = test_set.get_data()
-    # # PCA 降维
-    # print("使用 PCA 降维 ...")
-    # pca = PCA(n_components=30)
-    # X_train = pca.fit_transform(X_train)
-    # X_test = pca.transform(X_test)
+
+    # print("加载训练集 ...")
+    # train_set = ImageDatasetRaw(
+    #     root_dir="facial_expression_dataset_fan/train"
+    # )
+    # X_train, y_train = train_set.get_data()
+
+    # print("加载测试集 ...")
+    # test_set = ImageDatasetRaw(
+    #     root_dir="facial_expression_dataset_fan/test"
+    # )
+    # X_test, y_test = test_set.get_data()
+    # PCA 降维
+    print("使用 PCA 降维 ...")
+    pca = PCA(n_components=30)
+    X_train = pca.fit_transform(X_train)
+    X_test = pca.transform(X_test)
 
     print("开始训练 RandomForest ...")
     clf = RandomForestClassifier(
@@ -196,7 +196,6 @@ def train_rf():
 
     print(f"训练集准确率: {train_acc:.4f}")
     print(f"测试集准确率: {test_acc:.4f}")
-
 
 if __name__ == "__main__":
     train_rf()
